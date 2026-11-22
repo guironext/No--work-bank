@@ -1,9 +1,17 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  async redirects() {
+    return [
+      { source: "/connexion", destination: "/sign-in", permanent: false },
+      { source: "/inscription", destination: "/sign-up", permanent: false },
+    ];
+  },
   experimental: {
     agentFeedback: true,
+    serverActions: {
+      bodySizeLimit: "8mb",
+    },
   },
   cacheComponents: true,
   partialPrefetching: true,

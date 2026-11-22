@@ -1,0 +1,729 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["workbank"]
+}
+
+model Application {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId       String            @map("job_id") @db.Uuid
+  memberId    String            @map("member_id") @db.Uuid
+  status      ApplicationStatus @default(envoyee)
+  coverLetter String?           @map("cover_letter")
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  jobs        Job               @relation(fields: [jobId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "applications_job_id_jobs_id_fk")
+  members     Member            @relation(fields: [memberId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "applications_member_id_members_id_fk")
+  interviews  Interview[]
+
+  @@unique([jobId, memberId], map: "applications_job_member")
+  @@index([memberId], map: "applications_member")
+  @@index([status], map: "applications_status")
+  @@map("applications")
+  @@schema("workbank")
+}
+
+model AuditLog {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId   String?  @map("actor_id") @db.Uuid
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  members   Member?  @relation(fields: [actorId], references: [id], onUpdate: NoAction, map: "audit_logs_actor_id_members_id_fk")
+
+  @@map("audit_logs")
+  @@schema("workbank")
+}
+
+model City {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  countryCode String  @map("country_code")
+  name        String
+  countries   Country @relation(fields: [countryCode], references: [code], onDelete: NoAction, onUpdate: NoAction, map: "cities_country_code_countries_code_fk")
+
+  @@unique([countryCode, name], map: "cities_country_name")
+  @@map("cities")
+  @@schema("workbank")
+}
+
+model Commission {
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ambassadorId String           @map("ambassador_id") @db.Uuid
+  paymentId    String?          @map("payment_id") @db.Uuid
+  payoutId     String?          @map("payout_id") @db.Uuid
+  amount       Int
+  currency     String           @default("XOF")
+  status       CommissionStatus @default(en_attente)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  members      Member           @relation(fields: [ambassadorId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "commissions_ambassador_id_members_id_fk")
+  payments     Payment?         @relation(fields: [paymentId], references: [id], onUpdate: NoAction, map: "commissions_payment_id_payments_id_fk")
+
+  @@map("commissions")
+  @@schema("workbank")
+}
+
+model Company {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerMemberId      String?            @map("owner_member_id") @db.Uuid
+  seedKey            String?            @unique(map: "companies_seed_key") @map("seed_key")
+  legalName          String             @map("legal_name")
+  registrationNumber String?            @map("registration_number")
+  sector             String?
+  address            String?
+  city               String?
+  countryCode        String             @default("CI") @map("country_code")
+  phone              String?
+  email              String?
+  representative     String?
+  description        String?
+  kind               String             @default("entreprise")
+  isDemo             Boolean            @default(false) @map("is_demo")
+  verification       VerificationStatus @default(en_attente)
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  members            Member?            @relation(fields: [ownerMemberId], references: [id], onUpdate: NoAction, map: "companies_owner_member_id_members_id_fk")
+  company_documents  CompanyDocument[]
+  jobs               Job[]
+  payments           Payment[]
+  subscriptions      Subscription[]
+
+  @@index([ownerMemberId], map: "companies_owner")
+  @@index([sector], map: "companies_sector")
+  @@map("companies")
+  @@schema("workbank")
+}
+
+model CompanyDocument {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String  @map("company_id") @db.Uuid
+  label     String
+  url       String
+  companies Company @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "company_documents_company_id_companies_id_fk")
+
+  @@map("company_documents")
+  @@schema("workbank")
+}
+
+model Conversation {
+  id                                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subject                                 String
+  jobId                                   String?   @map("job_id") @db.Uuid
+  memberA                                 String    @map("member_a") @db.Uuid
+  memberB                                 String    @map("member_b") @db.Uuid
+  createdAt                               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  jobs                                    Job?      @relation(fields: [jobId], references: [id], onUpdate: NoAction, map: "conversations_job_id_jobs_id_fk")
+  members_conversations_member_aTomembers Member    @relation("conversations_member_aTomembers", fields: [memberA], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "conversations_member_a_members_id_fk")
+  members_conversations_member_bTomembers Member    @relation("conversations_member_bTomembers", fields: [memberB], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "conversations_member_b_members_id_fk")
+  messages                                Message[]
+
+  @@index([memberA, memberB], map: "conversations_pair")
+  @@map("conversations")
+  @@schema("workbank")
+}
+
+model Country {
+  code     String @id
+  name     String
+  currency String @default("XOF")
+  cities   City[]
+
+  @@map("countries")
+  @@schema("workbank")
+}
+
+model Education {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId    String  @map("member_id") @db.Uuid
+  title       String
+  institution String
+  year        String?
+  documentUrl String? @map("document_url")
+  kind        String  @default("diplome")
+  members     Member  @relation(fields: [memberId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "educations_member_id_members_id_fk")
+
+  @@map("educations")
+  @@schema("workbank")
+}
+
+model Experience {
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId     String  @map("member_id") @db.Uuid
+  title        String
+  organization String
+  startDate    String? @map("start_date")
+  endDate      String? @map("end_date")
+  current      Boolean @default(false)
+  description  String?
+  members      Member  @relation(fields: [memberId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "experiences_member_id_members_id_fk")
+
+  @@map("experiences")
+  @@schema("workbank")
+}
+
+model Favorite {
+  memberId  String   @map("member_id") @db.Uuid
+  jobId     String   @map("job_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  jobs      Job      @relation(fields: [jobId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "favorites_job_id_jobs_id_fk")
+  members   Member   @relation(fields: [memberId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "favorites_member_id_members_id_fk")
+
+  @@unique([memberId, jobId], map: "favorites_member_job")
+  @@map("favorites")
+  @@schema("workbank")
+}
+
+model Interview {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  scheduledAt   DateTime    @map("scheduled_at") @db.Timestamptz(6)
+  location      String?
+  notes         String?
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  applications  Application @relation(fields: [applicationId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "interviews_application_id_applications_id_fk")
+
+  @@map("interviews")
+  @@schema("workbank")
+}
+
+model Job {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String         @map("company_id") @db.Uuid
+  seedKey        String?        @unique(map: "jobs_seed_key") @map("seed_key")
+  title          String
+  description    String
+  missions       String?
+  requiredSkills String?        @map("required_skills")
+  educationLevel String?        @map("education_level")
+  experience     String?
+  city           String?
+  countryCode    String         @default("CI") @map("country_code")
+  sector         String?
+  contractType   String         @default("CDI") @map("contract_type")
+  salaryMin      Int?           @map("salary_min")
+  salaryMax      Int?           @map("salary_max")
+  currency       String         @default("XOF")
+  deadline       String?
+  openings       Int            @default(1)
+  status         JobStatus      @default(publiee)
+  isDemo         Boolean        @default(false) @map("is_demo")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  applications   Application[]
+  conversations  Conversation[]
+  favorites      Favorite[]
+  companies      Company        @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "jobs_company_id_companies_id_fk")
+  payments       Payment[]
+
+  @@index([city], map: "jobs_city")
+  @@index([sector], map: "jobs_sector")
+  @@index([status], map: "jobs_status")
+  @@map("jobs")
+  @@schema("workbank")
+}
+
+model Member {
+  id                                            String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clerkUserId                                   String                        @unique(map: "members_clerk_user") @map("clerk_user_id")
+  role                                          AccountRole                   @default(candidat)
+  isAdmin                                       Boolean                       @default(false) @map("is_admin")
+  approvalStatus                                ApprovalStatus                @default(approved) @map("approval_status")
+  firstName                                     String                        @map("first_name")
+  lastName                                      String                        @map("last_name")
+  phone                                         String?
+  email                                         String?
+  countryCode                                   String                        @default("CI") @map("country_code")
+  city                                          String?
+  domain                                        String?
+  educationLevel                                String?                       @map("education_level")
+  availability                                  String?
+  jobType                                       String?                       @map("job_type")
+  headline                                      String?
+  bio                                           String?
+  professionalId                                String                        @unique(map: "members_professional_id") @map("professional_id")
+  referralCode                                  String                        @unique(map: "members_referral_code") @map("referral_code")
+  referredById                                  String?                       @map("referred_by_id") @db.Uuid
+  locale                                        String                        @default("fr")
+  shareWithRecruiters                           Boolean                       @default(false) @map("share_with_recruiters")
+  cvPublic                                      Boolean                       @default(false) @map("cv_public")
+  verification                                  VerificationStatus            @default(en_attente)
+  consentAt                                     DateTime?                     @map("consent_at") @db.Timestamptz(6)
+  deletionRequestedAt                           DateTime?                     @map("deletion_requested_at") @db.Timestamptz(6)
+  lastSeenAt                                    DateTime?                     @map("last_seen_at") @db.Timestamptz(6)
+  createdAt                                     DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                                     DateTime                      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  applications                                  Application[]
+  audit_logs                                    AuditLog[]
+  commissions                                   Commission[]
+  companies                                     Company[]
+  conversations_conversations_member_aTomembers Conversation[]                @relation("conversations_member_aTomembers")
+  conversations_conversations_member_bTomembers Conversation[]                @relation("conversations_member_bTomembers")
+  educations                                    Education[]
+  experiences                                   Experience[]
+  favorites                                     Favorite[]
+  messages                                      Message[]
+  notifications                                 Notification[]
+  payments                                      Payment[]
+  payouts                                       Payout[]
+  portfolio_items                               PortfolioItem[]
+  professional_references                       ProfessionalReference[]
+  skills                                        Skill[]
+  subscriptions                                 Subscription[]
+  tickets                                       Ticket[]
+  invitationsCreated                            MemberInvitation[]            @relation("MemberInvitations")
+  opportunitiesCreated                          Opportunity[]
+  managerEmploymentPosts                        ManagerEmploymentPost[]
+  managerTrainings                              ManagerTraining[]
+  managerExamConcours                           ManagerExamConcours[]
+  managerOnlineEmploymentPosts                  ManagerOnlineEmploymentPost[]
+  managerCompanyListings                        ManagerCompanyListing[]
+
+  @@index([city], map: "members_city")
+  @@index([role], map: "members_role")
+  @@map("members")
+  @@schema("workbank")
+}
+
+model MemberInvitation {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email       String
+  role        AccountRole
+  tokenHash   String      @unique(map: "member_invitations_token_hash") @map("token_hash")
+  createdById String      @map("created_by_id") @db.Uuid
+  expiresAt   DateTime    @map("expires_at") @db.Timestamptz(6)
+  acceptedAt  DateTime?   @map("accepted_at") @db.Timestamptz(6)
+  revokedAt   DateTime?   @map("revoked_at") @db.Timestamptz(6)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  inviter     Member      @relation("MemberInvitations", fields: [createdById], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "member_invitations_created_by_id_members_id_fk")
+
+  @@index([email], map: "member_invitations_email")
+  @@index([createdById], map: "member_invitations_created_by")
+  @@map("member_invitations")
+  @@schema("workbank")
+}
+
+model Opportunity {
+  id               String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title            String
+  validFrom        DateTime                 @map("valid_from") @db.Date
+  validUntil       DateTime                 @map("valid_until") @db.Date
+  description      String
+  location         String?
+  registrationLink String?                  @map("registration_link")
+  contact          String?
+  contactPeople    String?                  @map("contact_people")
+  validatedAt      DateTime?                @map("validated_at") @db.Timestamptz(6)
+  createdById      String?                  @map("created_by_id") @db.Uuid
+  createdAt        DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  creator          Member?                  @relation(fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "opportunities_created_by_id_members_id_fk")
+  applications     OpportunityApplication[]
+
+  @@index([validUntil], map: "opportunities_valid_until")
+  @@index([createdAt], map: "opportunities_created_at")
+  @@map("opportunities")
+  @@schema("workbank")
+}
+
+model ManagerTraining {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  managerId        String    @map("manager_id") @db.Uuid
+  title            String
+  startDate        DateTime  @map("start_date") @db.Date
+  validFrom        DateTime  @map("valid_from") @db.Date
+  validUntil       DateTime  @map("valid_until") @db.Date
+  description      String
+  location         String?
+  registrationLink String?   @map("registration_link")
+  contact          String?
+  contactPeople    String?   @map("contact_people")
+  validatedAt      DateTime? @map("validated_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  manager          Member    @relation(fields: [managerId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "manager_trainings_manager_id_members_id_fk")
+
+  @@index([managerId, createdAt], map: "manager_trainings_manager_created")
+  @@index([validUntil], map: "manager_trainings_valid_until")
+  @@map("manager_trainings")
+  @@schema("workbank")
+}
+
+model ManagerExamConcours {
+  id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  managerId    String          @map("manager_id") @db.Uuid
+  title        String
+  type         ManagerExamType
+  validFrom    DateTime        @map("valid_from") @db.Date
+  validUntil   DateTime        @map("valid_until") @db.Date
+  description  String
+  ministry     String?
+  documentUrl  String?         @map("document_url")
+  documentName String?         @map("document_name")
+  validatedAt  DateTime?       @map("validated_at") @db.Timestamptz(6)
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  manager      Member          @relation(fields: [managerId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "manager_exam_concours_manager_id_members_id_fk")
+
+  @@index([managerId, createdAt], map: "manager_exam_concours_manager_created")
+  @@index([type, createdAt], map: "manager_exam_concours_type_created")
+  @@map("manager_exam_concours")
+  @@schema("workbank")
+}
+
+model ManagerEmploymentPost {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  managerId   String    @map("manager_id") @db.Uuid
+  title       String
+  companyName String    @map("company_name")
+  location    String
+  offerDate   DateTime  @map("offer_date") @db.Date
+  description String
+  mission     String
+  profile     String
+  level       String
+  workplace   String
+  experience  String
+  salary      String?
+  email       String
+  validatedAt DateTime? @map("validated_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  manager     Member    @relation(fields: [managerId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "manager_employment_posts_manager_id_members_id_fk")
+
+  @@index([managerId, createdAt], map: "manager_employment_posts_manager_created")
+  @@map("manager_employment_posts")
+  @@schema("workbank")
+}
+
+model ManagerOnlineEmploymentPost {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  managerId        String    @map("manager_id") @db.Uuid
+  title            String
+  description      String
+  companyName      String    @map("company_name")
+  registrationLink String?   @map("registration_link")
+  contact          String?
+  validatedAt      DateTime? @map("validated_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  manager          Member    @relation(fields: [managerId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "manager_online_employment_posts_manager_id_members_id_fk")
+
+  @@index([managerId, createdAt], map: "manager_online_employment_posts_manager_created")
+  @@map("manager_online_employment_posts")
+  @@schema("workbank")
+}
+
+model ManagerCompanyListing {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  managerId   String    @map("manager_id") @db.Uuid
+  title       String
+  description String
+  companyName String    @map("company_name")
+  location    String
+  website     String?
+  contact     String?
+  validatedAt DateTime? @map("validated_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  manager     Member    @relation(fields: [managerId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "manager_company_listings_manager_id_members_id_fk")
+
+  @@index([managerId, createdAt], map: "manager_company_listings_manager_created")
+  @@map("manager_company_listings")
+  @@schema("workbank")
+}
+
+model OpportunityApplication {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  opportunityId    String?      @map("opportunity_id") @db.Uuid
+  opportunityTitle String       @map("opportunity_title")
+  fullName         String       @map("full_name")
+  email            String
+  phone            String
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  opportunity      Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "opportunity_applications_opportunity_id_opportunities_id_fk")
+
+  @@index([opportunityId, createdAt], map: "opportunity_applications_opportunity_created")
+  @@map("opportunity_applications")
+  @@schema("workbank")
+}
+
+model Message {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  senderId       String       @map("sender_id") @db.Uuid
+  body           String
+  reported       Boolean      @default(false)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  conversations  Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "messages_conversation_id_conversations_id_fk")
+  members        Member       @relation(fields: [senderId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "messages_sender_id_members_id_fk")
+
+  @@map("messages")
+  @@schema("workbank")
+}
+
+model Notification {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId  String    @map("member_id") @db.Uuid
+  title     String
+  body      String
+  href      String?
+  readAt    DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  members   Member    @relation(fields: [memberId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "notifications_member_id_members_id_fk")
+
+  @@map("notifications")
+  @@schema("workbank")
+}
+
+model Payment {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId    String?       @map("member_id") @db.Uuid
+  companyId   String?       @map("company_id") @db.Uuid
+  planId      String?       @map("plan_id") @db.Uuid
+  jobId       String?       @map("job_id") @db.Uuid
+  amount      Int
+  currency    String        @default("XOF")
+  provider    String        @default("cinetpay")
+  status      PaymentStatus @default(en_attente)
+  reference   String
+  purpose     String?
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  commissions Commission[]
+  companies   Company?      @relation(fields: [companyId], references: [id], onUpdate: NoAction, map: "payments_company_id_companies_id_fk")
+  jobs        Job?          @relation(fields: [jobId], references: [id], onUpdate: NoAction, map: "payments_job_id_jobs_id_fk")
+  members     Member?       @relation(fields: [memberId], references: [id], onUpdate: NoAction, map: "payments_member_id_members_id_fk")
+  plans       Plan?         @relation(fields: [planId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "payments_plan_id_plans_id_fk")
+
+  @@map("payments")
+  @@schema("workbank")
+}
+
+model Payout {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId  String       @map("member_id") @db.Uuid
+  amount    Int
+  currency  String       @default("XOF")
+  status    PayoutStatus @default(demandee)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  members   Member       @relation(fields: [memberId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "payouts_member_id_members_id_fk")
+
+  @@map("payouts")
+  @@schema("workbank")
+}
+
+model Plan {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code          String          @unique(map: "plans_code_unique")
+  name          String
+  description   String?
+  audience      String          @default("entreprise")
+  amount        Int
+  currency      String          @default("XOF")
+  interval      BillingInterval @default(acte)
+  active        Boolean         @default(true)
+  payments      Payment[]
+  subscriptions Subscription[]
+
+  @@map("plans")
+  @@schema("workbank")
+}
+
+model PortfolioItem {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId    String  @map("member_id") @db.Uuid
+  title       String
+  description String?
+  url         String?
+  members     Member  @relation(fields: [memberId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "portfolio_items_member_id_members_id_fk")
+
+  @@map("portfolio_items")
+  @@schema("workbank")
+}
+
+model ProfessionalReference {
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId     String  @map("member_id") @db.Uuid
+  name         String
+  role         String?
+  organization String?
+  contact      String?
+  note         String?
+  members      Member  @relation(fields: [memberId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "professional_references_member_id_members_id_fk")
+
+  @@map("professional_references")
+  @@schema("workbank")
+}
+
+model Setting {
+  key   String @id
+  value String
+
+  @@map("settings")
+  @@schema("workbank")
+}
+
+model Skill {
+  id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId String    @map("member_id") @db.Uuid
+  name     String
+  kind     SkillKind @default(technique)
+  level    Int       @default(3)
+  members  Member    @relation(fields: [memberId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "skills_member_id_members_id_fk")
+
+  @@map("skills")
+  @@schema("workbank")
+}
+
+model Subscription {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId  String?   @map("member_id") @db.Uuid
+  companyId String?   @map("company_id") @db.Uuid
+  planId    String    @map("plan_id") @db.Uuid
+  status    String    @default("actif")
+  startsAt  DateTime  @default(now()) @map("starts_at") @db.Timestamptz(6)
+  endsAt    DateTime? @map("ends_at") @db.Timestamptz(6)
+  companies Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "subscriptions_company_id_companies_id_fk")
+  members   Member?   @relation(fields: [memberId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "subscriptions_member_id_members_id_fk")
+  plans     Plan      @relation(fields: [planId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "subscriptions_plan_id_plans_id_fk")
+
+  @@map("subscriptions")
+  @@schema("workbank")
+}
+
+model Ticket {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId  String?      @map("member_id") @db.Uuid
+  subject   String
+  body      String
+  status    TicketStatus @default(ouvert)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  members   Member?      @relation(fields: [memberId], references: [id], onUpdate: NoAction, map: "tickets_member_id_members_id_fk")
+
+  @@map("tickets")
+  @@schema("workbank")
+}
+
+enum AccountRole {
+  candidat
+  professionnel
+  entrepreneur
+  entreprise
+  universite
+  recruteur
+  investisseur
+  formateur
+  ambassadeur
+  admin
+  manager
+  comptable
+
+  @@map("account_role")
+  @@schema("workbank")
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+
+  @@map("approval_status")
+  @@schema("workbank")
+}
+
+enum ApplicationStatus {
+  envoyee
+  recue
+  preselectionnee
+  entretien
+  retenue
+  non_retenue
+  recrutement_confirme
+
+  @@map("application_status")
+  @@schema("workbank")
+}
+
+enum BillingInterval {
+  acte
+  mois
+  an
+
+  @@map("billing_interval")
+  @@schema("workbank")
+}
+
+enum CommissionStatus {
+  en_attente
+  validee
+  payee
+  rejetee
+
+  @@map("commission_status")
+  @@schema("workbank")
+}
+
+enum JobStatus {
+  brouillon
+  publiee
+  cloturee
+
+  @@map("job_status")
+  @@schema("workbank")
+}
+
+enum PaymentStatus {
+  en_attente
+  paye
+  echoue
+  rembourse
+
+  @@map("payment_status")
+  @@schema("workbank")
+}
+
+enum PayoutStatus {
+  demandee
+  validee
+  payee
+  rejetee
+
+  @@map("payout_status")
+  @@schema("workbank")
+}
+
+enum SkillKind {
+  technique
+  comportementale
+
+  @@map("skill_kind")
+  @@schema("workbank")
+}
+
+enum TicketStatus {
+  ouvert
+  en_cours
+  clos
+
+  @@map("ticket_status")
+  @@schema("workbank")
+}
+
+enum VerificationStatus {
+  en_attente
+  verifie
+  rejete
+
+  @@map("verification_status")
+  @@schema("workbank")
+}
+
+enum ManagerExamType {
+  examen
+  concours
+
+  @@schema("workbank")
+}
